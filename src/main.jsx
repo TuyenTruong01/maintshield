@@ -4,7 +4,7 @@ import { ethers } from 'ethers';
 import {
   ShieldCheck, Wallet, ExternalLink, LockKeyhole, Users, UserPlus, Wrench,
   ClipboardCheck, CheckCircle2, KeyRound, AlertTriangle, Factory, PlayCircle,
-  RefreshCw, Copy, Eye, BadgeCheck, UserCog, ListChecks, Send, ShieldAlert, MonitorPlay, UserCheck, Archive
+  RefreshCw, LogOut, Copy, Eye, BadgeCheck, UserCog, ListChecks, Send, ShieldAlert, MonitorPlay, UserCheck, Archive
 } from 'lucide-react';
 import './styles.css';
 
@@ -113,6 +113,14 @@ function App() {
     if (s.managers.some(m => lower(m) === lower(wallet))) return 'manager';
     if (s.technicians.some(t => lower(t) === lower(wallet))) return 'technician';
     return 'guest';
+  }
+
+
+  function signOut() {
+    setAccount('');
+    setChainId(null);
+    setPublicDemo(false);
+    setNotice('Signed out from MaintShield. To fully disconnect the site, remove this site connection in MetaMask.');
   }
 
   async function connectWallet() {
@@ -280,7 +288,10 @@ function App() {
         <div className="brand"><ShieldCheck size={26}/><span>MaintShield</span></div>
         <div className="nav-actions">
           <a href="https://docs.zama.org/protocol" target="_blank" rel="noreferrer">Zama Docs <ExternalLink size={13}/></a>
-          <button className="btn yellow" onClick={connectWallet}><Wallet size={16}/>{account && isAuthorized ? short(account) : 'Connect Wallet'}</button>
+          {account ? <>
+            <button className="btn yellow" onClick={connectWallet}><Wallet size={16}/>{isAuthorized ? short(account) : 'Connected Guest'}</button>
+            <button className="btn outline small" onClick={signOut}><LogOut size={15}/> Sign out</button>
+          </> : <button className="btn yellow" onClick={connectWallet}><Wallet size={16}/> Connect Wallet</button>}
         </div>
       </div>
       <div className="hero-grid wrap">

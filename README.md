@@ -143,3 +143,8 @@ Demo sequence:
 - Guest wallets still cannot see team wallet lists, full wallet addresses, contract address, or reward controls.
 - Public Demo Mode shows the workflow using sample names only: manager creates task, technician submits, manager approves, reward is encrypted, assigned technician decrypts.
 - Real actions still require a registered Manager or Technician wallet.
+
+
+## v3.3 update
+
+Added a **Sign out** button in the header. It clears the connected wallet state inside the app. For a full MetaMask-level disconnect, remove the site connection inside MetaMask.
