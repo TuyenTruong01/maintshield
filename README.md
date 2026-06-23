@@ -136,3 +136,10 @@ Demo sequence:
 11. Connect technician wallet.
 12. Technician decrypts own reward.
 13. Guest wallet cannot operate or decrypt.
+
+## v3.2 update
+
+- Added Public Demo Mode for judges and visitors.
+- Guest wallets still cannot see team wallet lists, full wallet addresses, contract address, or reward controls.
+- Public Demo Mode shows the workflow using sample names only: manager creates task, technician submits, manager approves, reward is encrypted, assigned technician decrypts.
+- Real actions still require a registered Manager or Technician wallet.
