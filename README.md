@@ -148,3 +148,28 @@ Demo sequence:
 ## v3.3 update
 
 Added a **Sign out** button in the header. It clears the connected wallet state inside the app. For a full MetaMask-level disconnect, remove the site connection inside MetaMask.
+
+## Live Demo
+
+Website: https://maintshielder.vercel.app/
+
+## GitHub Repository
+
+https://github.com/TuyenTruong01/maintshield
+
+## Sepolia Contract
+
+Network: Sepolia Testnet  
+Chain ID: 11155111  
+Contract Address: 0xa32AB0188823d25972F27f7c4D9254ae626a0AB7
+
+## Demo Mode
+
+The current frontend includes a public demo mode for judges.  
+Guest wallets can view the public product concept and demo flow, but cannot access manager wallets, technician wallets, contract controls, or reward controls.
+
+## Roles
+
+- Manager: creates tasks, assigns technicians, approves work, and assigns confidential rewards.
+- Technician: submits assigned work and decrypts only their own reward.
+- Guest: can only view the public concept and demo tour.
