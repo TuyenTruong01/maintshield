@@ -1,6 +1,11 @@
 {
-  "installCommand": "pnpm install --frozen-lockfile=false",
-  "buildCommand": "pnpm run build",
-  "outputDirectory": "dist",
-  "framework": "vite"
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "Cross-Origin-Opener-Policy", "value": "same-origin" },
+        { "key": "Cross-Origin-Embedder-Policy", "value": "require-corp" }
+      ]
+    }
+  ]
 }

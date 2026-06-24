@@ -5,10 +5,10 @@ pragma solidity ^0.8.24;
 // Exact package names may follow the template version. If imports fail,
 // use the import paths from your cloned Zama template.
 import {FHE, euint64, externalEuint64} from "@fhevm/solidity/lib/FHE.sol";
-import {SepoliaConfig} from "@fhevm/solidity/config/ZamaConfig.sol";
+import {ZamaEthereumConfig} from "@fhevm/solidity/config/ZamaConfig.sol";
 
 /// @notice Zama/FHE version for Builder Track: public maintenance workflow, private reward/KPI.
-contract MaintShieldFHE is SepoliaConfig {
+contract MaintShieldFHE is ZamaEthereumConfig {
     enum Status { Open, Submitted, Approved, RewardAssigned }
 
     struct TaskPublic {

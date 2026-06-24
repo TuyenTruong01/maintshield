@@ -4,7 +4,7 @@ import { ethers } from 'ethers';
 import {
   ShieldCheck, Wallet, ExternalLink, LockKeyhole, Users, UserPlus, Wrench,
   ClipboardCheck, CheckCircle2, KeyRound, AlertTriangle, Factory, PlayCircle,
-  RefreshCw, LogOut, Copy, Eye, BadgeCheck, UserCog, ListChecks, Send, ShieldAlert, MonitorPlay, UserCheck
+  RefreshCw, LogOut, Copy, Eye, BadgeCheck, UserCog, ListChecks, Send, ShieldAlert, MonitorPlay, UserCheck, Archive
 } from 'lucide-react';
 import './styles.css';
 
@@ -14,8 +14,6 @@ const ZERO = '0x0000000000000000000000000000000000000000';
 const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS || ZERO;
 const APP_MODE = (import.meta.env.VITE_APP_MODE || 'demo').toLowerCase();
 const CONTRACT_DEPLOY_BLOCK = Number(import.meta.env.VITE_CONTRACT_DEPLOY_BLOCK || 0);
-const RELAYER_RPC_URL = import.meta.env.VITE_RELAYER_RPC_URL || 'https://ethereum-sepolia-rpc.publicnode.com';
-
 
 const ABI = [
   'function addManager(address wallet) external',
@@ -39,8 +37,6 @@ const ABI = [
 const addr = (a) => (a || '').trim();
 const lower = (a) => addr(a).toLowerCase();
 const isAddress = (a) => ethers.isAddress(addr(a));
-const checksum = (a) => ethers.getAddress(addr(a));
-const validOrEmpty = (a) => { try { return checksum(a); } catch { return ''; } };
 const short = (a) => a ? `${a.slice(0, 6)}...${a.slice(-4)}` : 'Not connected';
 const parseList = (v) => (v || '').split(',').map(x => x.trim()).filter(isAddress);
 const parseNames = (v) => (v || '').split(',').map(x => x.trim()).filter(Boolean);
@@ -69,7 +65,7 @@ function managerLabel(wallet, state, revealAddress = true) {
 }
 
 function initialState() {
-  const saved = localStorage.getItem('maintshield-v35-fixed-state');
+  const saved = localStorage.getItem('maintshield-v35-state');
   if (saved) {
     try { return JSON.parse(saved); } catch {}
   }
@@ -91,19 +87,16 @@ function App() {
   const [account, setAccount] = useState('');
   const [chainId, setChainId] = useState(null);
   const [selectedTaskId, setSelectedTaskId] = useState(1);
-  const [notice, setNotice] = useState('Connect MetaMask/Rabby with an authorized Manager or Technician wallet.');
+  const [notice, setNotice] = useState('Connect MetaMask with an authorized Manager or Technician wallet.');
   const [busy, setBusy] = useState(false);
   const [forms, setForms] = useState({
-    manager: '', technician: '', taskTitle: 'Fix V131 leaking valve', equipment: 'V131 / Mixproof Valve', assignTo: defaultTechs[0] || '', reward: ''
+    manager: '', technician: '', taskTitle: 'Fix V131 leaking valve', equipment: 'V131 / Mixproof Valve', assignTo: defaultTechs[0] || '', reward: '150'
   });
   const [publicDemo, setPublicDemo] = useState(false);
-  // Draft reward amounts are intentionally kept only in the current browser session.
-  // The official reward is the amount the manager enters right before Encrypt & Assign Reward.
-  const [rewardDrafts, setRewardDrafts] = useState({});
   const [fheReady, setFheReady] = useState(false);
   const [fheLoading, setFheLoading] = useState(false);
 
-  useEffect(() => localStorage.setItem('maintshield-v35-fixed-state', JSON.stringify(state)), [state]);
+  useEffect(() => localStorage.setItem('maintshield-v35-state', JSON.stringify(state)), [state]);
   useEffect(() => {
     if (!window.ethereum) return;
     window.ethereum.request({ method: 'eth_accounts' }).then((accs) => { if (accs?.[0]) setAccount(accs[0]); });
@@ -128,10 +121,7 @@ function App() {
   const isAuthorized = role !== 'guest';
   const isManager = role === 'manager' || role === 'owner';
   const contractReady = CONTRACT_ADDRESS !== ZERO && APP_MODE === 'contract';
-  const isSepolia = (() => {
-    try { return chainId === SEPOLIA_CHAIN_ID_HEX || BigInt(chainId || 0) === SEPOLIA_CHAIN_ID; }
-    catch { return false; }
-  })();
+  const isSepolia = chainId === SEPOLIA_CHAIN_ID_HEX || BigInt(chainId || 0) === SEPOLIA_CHAIN_ID;
 
   function getRole(wallet, s) {
     if (!wallet) return 'guest';
@@ -172,9 +162,6 @@ function App() {
 
   async function signer() {
     const provider = new ethers.BrowserProvider(window.ethereum);
-    if (account && ethers.isAddress(account)) {
-      return provider.getSigner(account);
-    }
     return provider.getSigner();
   }
 
@@ -186,74 +173,19 @@ function App() {
 
 
   async function getFheInstance() {
-    if (!window.ethereum) {
-      throw new Error('MetaMask/Rabby provider is required for Zama Relayer SDK.');
-    }
-
-    if (!isAddress(CONTRACT_ADDRESS)) {
-      throw new Error('Contract address is not valid. Check VITE_CONTRACT_ADDRESS.');
-    }
-
+    if (!window.ethereum) throw new Error('MetaMask/Rabby provider is required for Zama Relayer SDK.');
     setFheLoading(true);
-
     try {
-      let mod = null;
-      const importErrors = [];
-
-      // @zama-fhe/relayer-sdk@0.4.4 exports both /web and /bundle.
-      // Prefer /web for Vite/browser, fallback to /bundle if needed.
-      try {
-        mod = await import('@zama-fhe/relayer-sdk/web');
-      } catch (e1) {
-        importErrors.push(`web: ${e1?.message || e1}`);
-        try {
-          mod = await import('@zama-fhe/relayer-sdk/bundle');
-        } catch (e2) {
-          importErrors.push(`bundle: ${e2?.message || e2}`);
-          console.error('Relayer SDK import errors:', importErrors);
-          throw new Error(`Cannot import Zama Relayer SDK. ${importErrors.join(' | ')}`);
-        }
+      const sdk = await import('@zama-fhe/relayer-sdk/bundle').catch(async () => await import('@zama-fhe/relayer-sdk'));
+      const { initSDK, createInstance, SepoliaConfig } = sdk;
+      if (!initSDK || !createInstance || !SepoliaConfig) {
+        throw new Error('Relayer SDK import failed. Check @zama-fhe/relayer-sdk installation.');
       }
-
-      console.log('Relayer SDK module:', mod);
-
-      const sdk = mod?.default || mod || {};
-      const initSDK = sdk?.initSDK || mod?.initSDK || sdk?.init || mod?.init || null;
-      const createInstance = sdk?.createInstance || mod?.createInstance || null;
-      const SepoliaConfig = sdk?.SepoliaConfig || mod?.SepoliaConfig || sdk?.sepoliaConfig || mod?.sepoliaConfig || null;
-
-      if (typeof initSDK === 'function') {
-        await initSDK();
+      await initSDK();
+      const instance = await createInstance({ ...SepoliaConfig, network: window.ethereum });
+      if (!instance?.createEncryptedInput || !instance?.userDecrypt) {
+        throw new Error('Relayer SDK initialized, but encryption/decryption APIs are unavailable. Check WASM loading in Vite.');
       }
-
-      if (typeof createInstance !== 'function') {
-        const keys = Object.keys(mod || {}).join(', ') || 'no exports';
-        throw new Error(`Relayer SDK loaded, but createInstance() was not found. Available exports: ${keys}`);
-      }
-
-      if (!SepoliaConfig) {
-        const keys = Object.keys(mod || {}).join(', ') || 'no exports';
-        throw new Error(`Relayer SDK loaded, but SepoliaConfig was not found. Available exports: ${keys}`);
-      }
-
-      const instance = await createInstance({
-        ...SepoliaConfig,
-        // Wallet provider is preferred in browser so SDK can resolve the active Sepolia network.
-        network: window.ethereum,
-      });
-
-      if (!instance) {
-        throw new Error('Relayer SDK instance was not created.');
-      }
-
-      if (typeof instance.createEncryptedInput !== 'function') {
-        throw new Error('Relayer SDK instance does not expose createEncryptedInput().');
-      }
-
-      if (typeof instance.userDecrypt !== 'function') {
-        throw new Error('Relayer SDK instance does not expose userDecrypt().');
-      }
-
       setFheReady(true);
       return instance;
     } finally {
@@ -273,31 +205,25 @@ function App() {
     const provider = new ethers.BrowserProvider(window.ethereum);
     const c = new ethers.Contract(CONTRACT_ADDRESS, ABI, provider);
     const latest = await provider.getBlockNumber();
-    const fromBlock = CONTRACT_DEPLOY_BLOCK > 0 ? CONTRACT_DEPLOY_BLOCK : Math.max(0, latest - 20000);
+    const fromBlock = CONTRACT_DEPLOY_BLOCK > 0 ? CONTRACT_DEPLOY_BLOCK : Math.max(0, latest - 50000);
 
-    let managerEvents = [], techEvents = [], createdEvents = [], submittedEvents = [], approvedEvents = [], rewardEvents = [];
-    try {
-      [managerEvents, techEvents, createdEvents, submittedEvents, approvedEvents, rewardEvents] = await Promise.all([
-        c.queryFilter(c.filters.ManagerAdded(), fromBlock, latest),
-        c.queryFilter(c.filters.TechnicianAdded(), fromBlock, latest),
-        c.queryFilter(c.filters.TaskCreated(), fromBlock, latest),
-        c.queryFilter(c.filters.TaskSubmitted(), fromBlock, latest),
-        c.queryFilter(c.filters.TaskApproved(), fromBlock, latest),
-        c.queryFilter(c.filters.ConfidentialRewardAssigned(), fromBlock, latest),
-      ]);
-    } catch (err) {
-      const msg = err?.shortMessage || err?.message || String(err);
-      throw new Error(`Sync failed. Check VITE_CONTRACT_DEPLOY_BLOCK and RPC range. Details: ${msg}`);
-    }
+    const [managerEvents, techEvents, createdEvents, submittedEvents, approvedEvents, rewardEvents] = await Promise.all([
+      c.queryFilter(c.filters.ManagerAdded(), fromBlock, latest),
+      c.queryFilter(c.filters.TechnicianAdded(), fromBlock, latest),
+      c.queryFilter(c.filters.TaskCreated(), fromBlock, latest),
+      c.queryFilter(c.filters.TaskSubmitted(), fromBlock, latest),
+      c.queryFilter(c.filters.TaskApproved(), fromBlock, latest),
+      c.queryFilter(c.filters.ConfidentialRewardAssigned(), fromBlock, latest),
+    ]);
 
     const managers = [...defaultManagers];
     const technicians = [...defaultTechs];
     for (const ev of managerEvents) {
-      const w = validOrEmpty(ev.args?.wallet || ev.args?.[0]);
+      const w = ev.args?.wallet || ev.args?.[0];
       if (w && !managers.some(x => lower(x) === lower(w))) managers.push(w);
     }
     for (const ev of techEvents) {
-      const w = validOrEmpty(ev.args?.wallet || ev.args?.[0]);
+      const w = ev.args?.wallet || ev.args?.[0];
       if (w && !technicians.some(x => lower(x) === lower(w))) technicians.push(w);
     }
 
@@ -312,7 +238,7 @@ function App() {
         id,
         title: ev.args?.title || ev.args?.[2] || `Task #${id}`,
         equipment: ev.args?.equipmentCode || ev.args?.[3] || '',
-        technician: validOrEmpty(ev.args?.technician || ev.args?.[1]) || '',
+        technician: ev.args?.technician || ev.args?.[1] || '',
         status: statusMap.get(id) ?? 0,
         rewardAssigned: (statusMap.get(id) ?? 0) === 3,
         rewardPreview: '',
@@ -365,22 +291,11 @@ function App() {
     return true;
   }
 
-
-  function rewardValueFor(task) {
-    if (!task?.id) return forms.reward || '';
-    return rewardDrafts[String(task.id)] ?? forms.reward ?? '';
-  }
-
-  function setRewardForTask(task, value) {
-    if (task?.id) setRewardDrafts(d => ({ ...d, [String(task.id)]: value }));
-    setForms(f => ({ ...f, reward: value }));
-  }
-
   async function addManager() {
     if (!requireManager() || !isAddress(forms.manager)) return setNotice('Enter a valid manager wallet address.');
     setBusy(true);
     try {
-      await txCall('addManager', [checksum(forms.manager)], `Add manager ${short(forms.manager)}`);
+      await txCall('addManager', [forms.manager], `Add manager ${short(forms.manager)}`);
       setState(s => s.managers.some(m => lower(m) === lower(forms.manager)) ? s : { ...s, managers: [...s.managers, forms.manager], managerNames: [...(s.managerNames || []), `Manager ${s.managers.length + 1}`] });
       setForms(f => ({ ...f, manager: '' }));
     } catch (e) { setNotice(e?.shortMessage || e?.message || 'Add manager failed.'); } finally { setBusy(false); }
@@ -390,7 +305,7 @@ function App() {
     if (!requireManager() || !isAddress(forms.technician)) return setNotice('Enter a valid technician wallet address.');
     setBusy(true);
     try {
-      await txCall('addTechnician', [checksum(forms.technician)], `Whitelist technician ${short(forms.technician)}`);
+      await txCall('addTechnician', [forms.technician], `Whitelist technician ${short(forms.technician)}`);
       setState(s => s.technicians.some(t => lower(t) === lower(forms.technician)) ? s : { ...s, technicians: [...s.technicians, forms.technician], technicianNames: [...(s.technicianNames || []), `Technician ${s.technicians.length + 1}`] });
       setForms(f => ({ ...f, technician: '', assignTo: f.assignTo || forms.technician }));
     } catch (e) { setNotice(e?.shortMessage || e?.message || 'Add technician failed.'); } finally { setBusy(false); }
@@ -402,7 +317,7 @@ function App() {
     if (!state.technicians.some(t => lower(t) === lower(forms.assignTo))) return setNotice('The assigned wallet is not in the technician whitelist.');
     setBusy(true);
     try {
-      await txCall('createTask', [forms.taskTitle, forms.equipment, checksum(forms.assignTo)], `Create task for ${short(forms.assignTo)}`);
+      await txCall('createTask', [forms.taskTitle, forms.equipment, forms.assignTo], `Create task for ${short(forms.assignTo)}`);
       if (!contractReady) {
         setState(s => {
           const id = Math.max(0, ...s.tasks.map(t => t.id)) + 1;
@@ -436,20 +351,16 @@ function App() {
   async function assignReward(task) {
     if (!requireManager()) return;
     if (task.status !== 2) return setNotice('Reward can only be assigned after manager approval.');
-    const rewardAmount = rewardValueFor(task);
-    if (!rewardAmount || Number(rewardAmount) <= 0) return setNotice('Enter a valid reward amount.');
+    if (!forms.reward || Number(forms.reward) <= 0) return setNotice('Enter a valid reward/KPI amount.');
     setBusy(true);
     try {
       if (contractReady) {
         if (!isSepolia) await switchSepolia();
         setNotice('Initializing Zama Relayer SDK and encrypting reward amount...');
         const instance = await getFheInstance();
-        const s = await signer();
-        const userAddress = checksum(await s.getAddress());
-        const contractAddress = checksum(CONTRACT_ADDRESS);
-        const reward = BigInt(Math.floor(Number(rewardAmount)));  // any positive integer reward amount
+        const reward = BigInt(Math.floor(Number(forms.reward)));
         const encryptedInput = await instance
-          .createEncryptedInput(contractAddress, userAddress)
+          .createEncryptedInput(CONTRACT_ADDRESS, account)
           .add64(reward)
           .encrypt();
 
@@ -463,9 +374,9 @@ function App() {
         return;
       }
 
-      const fakeHandle = ethers.keccak256(ethers.toUtf8Bytes(`${task.id}:${rewardAmount}:${task.technician}:${Date.now()}`));
+      const fakeHandle = ethers.keccak256(ethers.toUtf8Bytes(`${task.id}:${forms.reward}:${task.technician}:${Date.now()}`));
       await signAction(`Encrypt & assign reward for task #${task.id}`);
-      updateTask(task.id, { status: 3, rewardAssigned: true, rewardPreview: rewardAmount, encryptedHandle: fakeHandle }, `Encrypted reward assigned`);
+      updateTask(task.id, { status: 3, rewardAssigned: true, rewardPreview: forms.reward, encryptedHandle: fakeHandle }, `Encrypted reward assigned`);
     } catch (e) {
       setNotice(e?.shortMessage || e?.message || 'Assign encrypted reward failed.');
     } finally { setBusy(false); }
@@ -478,23 +389,19 @@ function App() {
     try {
       if (contractReady) {
         if (!isSepolia) await switchSepolia();
-        setNotice('Reading encrypted reward handle from contract with the connected technician wallet...');
-        // getEncryptedReward() checks msg.sender in the contract, so this read must run with the connected technician signer.
-        // A provider-only eth_call has no valid msg.sender and reverts with "Not allowed".
-        const c = await contractWithSigner();
-        const encryptedHandle = await c.getEncryptedReward.staticCall(task.id);
+        setNotice('Reading encrypted reward handle from contract...');
+        const c = await contractReadOnly();
+        const encryptedHandle = await c.getEncryptedReward(task.id);
         if (!encryptedHandle || encryptedHandle === ethers.ZeroHash) throw new Error('Encrypted reward handle is empty.');
 
         setNotice('Initializing Zama Relayer SDK for user decryption...');
         const instance = await getFheInstance();
         const s = await signer();
-        const userAddress = checksum(await s.getAddress());
-        const contractAddress = checksum(CONTRACT_ADDRESS);
         const keypair = instance.generateKeypair();
-        const startTimestamp = Math.floor(Date.now() / 1000);
-        const durationDays = 10;
-        const contractAddresses = [contractAddress];
-        const handleContractPairs = [{ handle: encryptedHandle, contractAddress }];
+        const startTimestamp = Math.floor(Date.now() / 1000).toString();
+        const durationDays = '10';
+        const contractAddresses = [CONTRACT_ADDRESS];
+        const handleContractPairs = [{ handle: encryptedHandle, contractAddress: CONTRACT_ADDRESS }];
         const eip712 = instance.createEIP712(keypair.publicKey, contractAddresses, startTimestamp, durationDays);
 
         setNotice('Sign EIP-712 request to decrypt only your own reward...');
@@ -511,7 +418,7 @@ function App() {
           keypair.publicKey,
           signature.replace(/^0x/, ''),
           contractAddresses,
-          userAddress,
+          account,
           startTimestamp,
           durationDays,
         );
@@ -532,7 +439,7 @@ function App() {
   }
 
   function resetDemo() {
-    localStorage.removeItem('maintshield-v35-fixed-state');
+    localStorage.removeItem('maintshield-v35-state');
     setState(initialState());
     setNotice('Demo reset. Connect an authorized wallet to continue.');
   }
@@ -550,7 +457,7 @@ function App() {
     { id: 1, title: 'Fix V131 leaking mixproof valve', equipment: 'V131 / Mixproof Valve', technician: 'Liam Carter', status: 'Open', reward: 'Encrypted after approval' },
     { id: 2, title: 'Submit completed work order', equipment: 'UHT-02 / 6000h service', technician: 'Noah Bennett', status: 'Submitted', reward: 'Not assigned' },
     { id: 3, title: 'Approve maintenance inspection', equipment: 'CIP-01 / Monthly inspection', technician: 'Oliver Reed', status: 'Approved', reward: 'Ready to encrypt' },
-    { id: 4, title: 'Decrypt personal reward', equipment: 'Filler-03 / Breakdown recovery', technician: 'Lucas Morgan', status: 'Reward Assigned', reward: 'Only assigned technician can decrypt' }
+    { id: 4, title: 'Decrypt personal KPI reward', equipment: 'Filler-03 / Breakdown recovery', technician: 'Lucas Morgan', status: 'Reward Assigned', reward: 'Only assigned technician can decrypt' }
   ];
 
   return <div className="app">
@@ -569,7 +476,7 @@ function App() {
         <div className="hero-left">
           <div className="pill"><LockKeyhole size={14}/> Builder Track MVP — Sepolia Testnet</div>
           <h1>Confidential rewards for maintenance teams.</h1>
-          <p>Managers create tasks and assign them only to whitelisted technician wallets. Technicians submit work, managers approve it, then reward values are encrypted with Zama.</p>
+          <p>Managers create tasks and assign them only to whitelisted technician wallets. Technicians submit work, managers approve it, then reward/KPI values are encrypted with Zama.</p>
           <div className="hero-buttons">
             {isAuthorized ? <a className="btn yellow" href="#workflow"><PlayCircle size={17}/> Open Demo Flow</a> : <button className="btn yellow" onClick={()=>setPublicDemo(true)}><PlayCircle size={17}/> Open Public Demo Mode</button>}
             {!isAuthorized && publicDemo && <button className="btn muted" onClick={()=>setPublicDemo(false)}><ShieldAlert size={17}/> Close Demo Mode</button>}
@@ -582,7 +489,7 @@ function App() {
           <h2>Public workflow, private reward.</h2>
           <div className="case-boxes">
             <div><small>PUBLIC</small><b>Task status</b><b>Equipment code</b><b>Approval status</b></div>
-            <div><small>ENCRYPTED</small><b>Reward amount</b><b>Bonus points</b><b>Private performance</b></div>
+            <div><small>ENCRYPTED</small><b>Reward amount</b><b>KPI score</b><b>Bonus points</b><b>Personal performance</b></div>
           </div>
         </div>
       </div>
@@ -635,7 +542,7 @@ function App() {
           <DemoStep icon={<UserCog/>} title="1. Manager creates task" text="A registered manager creates a maintenance task and chooses a technician from the whitelist."/>
           <DemoStep icon={<UserCheck/>} title="2. Technician submits" text="Only the assigned technician can submit the work as completed."/>
           <DemoStep icon={<BadgeCheck/>} title="3. Manager approves" text="The manager checks the real work and approves the task before any reward is assigned."/>
-          <DemoStep icon={<LockKeyhole/>} title="4. Reward is encrypted" text="Reward values stay confidential; only the assigned technician can decrypt their own reward."/>
+          <DemoStep icon={<LockKeyhole/>} title="4. Reward is encrypted" text="Reward/KPI values stay confidential; only the assigned technician can decrypt their own reward."/>
         </div>
         <div className="card demo-board">
           <div className="board-head"><h2>Sample Workflow Board</h2><p>No full wallet addresses, contract address, or reward amount is exposed in public demo mode.</p></div>
@@ -683,7 +590,9 @@ function App() {
             <option value="">Select whitelisted technician</option>
             {state.technicians.map(t => <option key={t} value={t}>{techLabel(t, state)}</option>)}
           </select>
-          <p className="hint">Reward is not stored when the task is created. The manager enters the official confidential reward only after technician submission and manager approval.</p>
+          <label>Planned Reward / KPI amount</label>
+          <input value={forms.reward} onChange={e=>setForms({...forms, reward:e.target.value})} placeholder="150"/>
+          <p className="hint">This value is encrypted and assigned only after manager approval.</p>
           <button className="btn yellow wide" disabled={busy} onClick={createTask}><Send size={16}/> Create Task</button>
         </div>
       </section>}
@@ -704,16 +613,8 @@ function App() {
               {isManager && <button className="btn dark" disabled={busy || selectedTask.status !== 1} onClick={()=>approveTask(selectedTask)}><BadgeCheck size={16}/> Manager Approve</button>}
             </div>
             {isManager && <div className="reward-box">
-              <label>Confidential reward amount</label>
-              <input
-                type="number"
-                min="1"
-                value={selectedTask.status === 2 ? rewardValueFor(selectedTask) : ''}
-                onChange={e=>setRewardForTask(selectedTask, e.target.value)}
-                placeholder={selectedTask.status === 2 ? 'Enter reward before encryption' : 'Available after manager approval'}
-                disabled={selectedTask.status !== 2 || busy}
-              />
-              <p className="muted-text">The official reward is the amount entered here immediately before encryption. It is encrypted before being stored on-chain.</p>
+              <label>Reward / KPI amount</label>
+              <input value={forms.reward} onChange={e=>setForms({...forms, reward:e.target.value})}/>
               <button className="btn dark wide" disabled={busy || selectedTask.status !== 2} onClick={()=>assignReward(selectedTask)}><LockKeyhole size={16}/> Encrypt & Assign Reward</button>
             </div>}
             {role === 'technician' && lower(account) === lower(selectedTask.technician) && <div className="reward-box">

@@ -1,6 +1,6 @@
 {
   "name": "maintshield-zama-builder-v3",
-  "version": "3.0.0",
+  "version": "3.5.5-sdk-final",
   "private": true,
   "type": "module",
   "scripts": {
@@ -14,7 +14,8 @@
     "react": "latest",
     "react-dom": "latest",
     "ethers": "^6.13.5",
-    "lucide-react": "latest"
+    "lucide-react": "latest",
+    "@zama-fhe/relayer-sdk": "0.4.4"
   },
   "devDependencies": {}
 }

@@ -1,175 +1,44 @@
-# MaintShield — Zama Builder Track MVP v3
+# MaintShield v35 fixed
 
-MaintShield is a confidential reward layer for maintenance teams.
+Fixes applied:
 
-Public workflow:
-- Manager creates a maintenance task.
-- Manager assigns it only to a whitelisted technician wallet.
-- Technician submits completion.
-- Manager approves after real-world verification.
+- Keep the working Sepolia contract workflow: create task, submit, approve, sync from events.
+- Use the official browser/Vite bundle entry for Zama Relayer SDK: `@zama-fhe/relayer-sdk/bundle`.
+- Remove fallback import from the root `@zama-fhe/relayer-sdk`, which can break Vite exports.
+- Normalize manager, technician, contract, and user addresses with `ethers.getAddress()` before FHE calls.
+- Remove KPI wording from the UI and use `Reward amount` only.
+- Use a new localStorage key `maintshield-v35-fixed-state` to avoid stale/corrupt state from previous v35 runs.
+- Improve sync error message if `VITE_CONTRACT_DEPLOY_BLOCK` or RPC range is wrong.
 
-Private data:
-- Reward amount
-- KPI score
-- Bonus points
-
-The v3 frontend can connect MetaMask and classify the connected wallet as Owner / Manager / Technician / Guest based on public wallet addresses in the whitelist.
-
-## Important security note
-
-Never share seed phrase.
-Never paste seed phrase into this app.
-Never upload private key to GitHub.
-Use a fresh Sepolia-only wallet for deployment.
-
-## Run frontend
-
-```bash
-cd maintshield-zama-builder-v3
-npm install
-npm run dev
-```
-
-Open the local URL shown by Vite, normally:
-
-```text
-http://localhost:5173
-```
-
-## Configure your 2 manager wallets and 5 technician wallets
-
-Open `.env.example`, copy it to `.env`, then put PUBLIC wallet addresses only:
-
-```bash
-cp .env.example .env
-```
-
-Example:
+## Required .env
 
 ```env
-VITE_INITIAL_MANAGERS=0xManager1...,0xManager2...
-VITE_INITIAL_TECHNICIANS=0xTech1...,0xTech2...,0xTech3...,0xTech4...,0xTech5...
-VITE_APP_MODE=demo
-```
-
-Restart Vite after changing `.env`:
-
-```bash
-npm run dev
-```
-
-## Frontend modes
-
-### 1. Demo mode
-
-```env
-VITE_APP_MODE=demo
-```
-
-This mode:
-- Connects real MetaMask wallet.
-- Checks role based on whitelist.
-- Requires MetaMask signature for actions.
-- Stores task state in browser `localStorage`.
-- Good for UI testing and video flow rehearsal.
-
-### 2. Contract mode
-
-```env
+VITE_CONTRACT_ADDRESS=0xa32AB0188823d25972F27f7c4D9254ae626a0AB7
+VITE_INITIAL_MANAGERS=0x8e23Ca66E4E4d68c6C52Ed651d8487320B3d57d2
+VITE_INITIAL_TECHNICIANS=0x7c2C99A13E9632bd4eB75266D5b4BF542893eb8c,0x757cA0b11D16F19d1CB9C4cEDbbB75756E60eE07,0xE39466bAf3a8F3408085675D3f70cCdc3055Fd2c,0xFC113F00AF0DE0397755012c6c6C4B638cB980CD,0x9Eb1e4207a84002c6deaACD56589322Ffbb708e5
+VITE_MANAGER_NAMES=Ethan Brooks
+VITE_TECHNICIAN_NAMES=Liam Carter,Noah Bennett,Oliver Reed,Lucas Morgan,Mason Clark
 VITE_APP_MODE=contract
-VITE_CONTRACT_ADDRESS=0xYourSepoliaContract
+VITE_CONTRACT_DEPLOY_BLOCK=11126883
 ```
 
-This mode sends transactions to the contract address.
-For full Zama encrypted reward, connect the frontend to the Zama Relayer SDK encryption/decryption flow.
+Optional if wallet RPC causes Relayer SDK trouble:
 
-## Contracts included
+```env
+VITE_RELAYER_RPC_URL=https://ethereum-sepolia-rpc.publicnode.com
+```
 
-### `contracts/MaintShieldWorkflow.sol`
+## Test flow
 
-A normal Solidity workflow contract for dry-run and basic Sepolia tests. It does not store plaintext reward; it stores a `bytes32 encryptedRewardHandle` placeholder.
+1. Manager connects and clicks **Sync Contract**.
+2. Manager creates task.
+3. Technician connects and submits task.
+4. Manager approves task.
+5. Manager clicks **Encrypt & Assign Reward**.
+6. Technician clicks **Decrypt My Reward**.
 
-### `contracts/MaintShieldFHE.sol`
+If Relayer SDK fails, the public workflow still works on-chain; capture the exact notice/console error for the reward step.
 
-The Zama/FHEVM version. Copy this into the official Zama FHEVM Hardhat template. It uses:
+### v35 fixed3 note
 
-- `externalEuint64 encryptedReward`
-- `bytes inputProof`
-- `FHE.fromExternal(...)`
-- `FHE.allowThis(...)`
-- `FHE.allow(..., technician)`
-
-This is the contract direction for Builder Track, because Zama encrypted inputs keep sensitive values confidential and user decryption allows only authorized users to decrypt their own encrypted values.
-
-## Real Builder Track deployment flow
-
-1. Create a fresh MetaMask wallet for Sepolia testnet.
-2. Get Sepolia ETH from a faucet.
-3. Clone the official Zama FHEVM Hardhat template.
-4. Copy `contracts/MaintShieldFHE.sol` into the template `contracts/` folder.
-5. Add your manager and technician addresses to the deploy script.
-6. Compile.
-7. Deploy to Sepolia.
-8. Copy deployed contract address into frontend `.env`.
-9. Connect Relayer SDK in frontend for real reward encryption/decryption.
-10. Deploy frontend to Vercel.
-11. Record a real-person 3-minute pitch video.
-12. Publish X thread/article.
-13. Submit Zama Builder Track form.
-
-## Demo story
-
-> Maintenance work is visible. Rewards and KPI values are private.
-
-Demo sequence:
-
-1. Connect Manager wallet.
-2. Add another manager wallet.
-3. Add 5 technician wallets to whitelist.
-4. Create task: `Fix V131 leaking valve`.
-5. Assign task to one whitelisted technician.
-6. Connect technician wallet.
-7. Technician submits completed work.
-8. Connect manager wallet.
-9. Manager approves after verification.
-10. Manager assigns confidential reward.
-11. Connect technician wallet.
-12. Technician decrypts own reward.
-13. Guest wallet cannot operate or decrypt.
-
-## v3.2 update
-
-- Added Public Demo Mode for judges and visitors.
-- Guest wallets still cannot see team wallet lists, full wallet addresses, contract address, or reward controls.
-- Public Demo Mode shows the workflow using sample names only: manager creates task, technician submits, manager approves, reward is encrypted, assigned technician decrypts.
-- Real actions still require a registered Manager or Technician wallet.
-
-
-## v3.3 update
-
-Added a **Sign out** button in the header. It clears the connected wallet state inside the app. For a full MetaMask-level disconnect, remove the site connection inside MetaMask.
-
-## Live Demo
-
-Website: https://maintshielder.vercel.app/
-
-## GitHub Repository
-
-https://github.com/TuyenTruong01/maintshield
-
-## Sepolia Contract
-
-Network: Sepolia Testnet  
-Chain ID: 11155111  
-Contract Address: 0xa32AB0188823d25972F27f7c4D9254ae626a0AB7
-
-## Demo Mode
-
-The current frontend includes a public demo mode for judges.  
-Guest wallets can view the public product concept and demo flow, but cannot access manager wallets, technician wallets, contract controls, or reward controls.
-
-## Roles
-
-- Manager: creates tasks, assigns technicians, approves work, and assigns confidential rewards.
-- Technician: submits assigned work and decrypts only their own reward.
-- Guest: can only view the public concept and demo tour.
+`getEncryptedReward()` is called with the connected technician signer because the contract checks `msg.sender`. A read-only provider call can revert with `Not allowed`.
